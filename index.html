@@ -1,108 +1,66 @@
-<script type="text/babel">
-    const { useState, useEffect } = React;
-    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מחשבון השקעות S&P 500</title>
+    <!-- ספריות נדרשות -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        input, select, button { padding: 8px; margin: 5px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        .results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        function App() {
+            const [data, setData] = React.useState(null);
+            const [error, setError] = React.useState(null);
 
-    function App() {
-        const [sp500Data, setSP500Data] = useState([]);
-        const [params, setParams] = useState({
-            monthlyInvestment: 100,
-            dropPercentage: 20,
-            increasePercentage: 50,
-            years: 5
-        });
-        
-        const [results, setResults] = useState({
-            totalInvested: 0,
-            finalValue: 0,
-            returns: []
-        });
-
-        useEffect(() => {
-            // טעינת נתוני S&P 500 מה-CSV
-            fetch('data/sp500_data.csv')
-                .then(response => response.text())
-                .then(csvText => {
-                    Papa.parse(csvText, {
-                        header: true,
-                        complete: (results) => {
-                            const data = results.data
-                                .filter(row => row.Date && row.Price) // מסנן שורות לא תקינות
-                                .map(row => ({
-                                    date: row.Date,
-                                    value: parseFloat(row.Price)
-                                }))
-                                .sort((a, b) => new Date(a.date) - new Date(b.date));
-                            setSP500Data(data);
-                        },
-                        error: (error) => {
-                            console.error('Error parsing CSV:', error);
+            React.useEffect(() => {
+                fetch('data/sp500_data.csv')
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('CSV file not found');
                         }
-                    });
-                })
-                .catch(error => console.error('Error loading CSV:', error));
-        }, []);
+                        return response.text();
+                    })
+                    .then(csv => {
+                        console.log("CSV loaded:", csv.substring(0, 100)); // לוג לבדיקה
+                        Papa.parse(csv, {
+                            header: true,
+                            complete: (results) => {
+                                console.log("Parsed data:", results.data); // לוג לבדיקה
+                                setData(results.data);
+                            },
+                            error: (err) => setError(err.message)
+                        });
+                    })
+                    .catch(err => setError(err.message));
+            }, []);
 
-        const calculateInvestmentReturns = (params) => {
-            if (sp500Data.length === 0) return null;
+            if (error) return <div>Error: {error}</div>;
+            if (!data) return <div>Loading...</div>;
 
-            const {
-                monthlyInvestment,
-                dropPercentage,
-                increasePercentage,
-                years
-            } = params;
+            return (
+                <div className="container">
+                    <h1>מחשבון השקעות S&P 500</h1>
+                    <div>
+                        <p>נטען {data.length} רשומות</p>
+                    </div>
+                </div>
+            );
+        }
 
-            let portfolio = {
-                totalInvested: 0,
-                currentValue: 0,
-                monthlyData: []
-            };
-
-            let lastHighestValue = 0;
-            const startIndex = Math.max(0, sp500Data.length - (years * 12));
-            
-            for (let i = 0; i < years * 12 && (startIndex + i) < sp500Data.length; i++) {
-                let currentInvestment = monthlyInvestment;
-                const currentPrice = sp500Data[startIndex + i].value;
-
-                if (lastHighestValue > 0) {
-                    const dropFromHigh = ((lastHighestValue - currentPrice) / lastHighestValue) * 100;
-                    if (dropFromHigh >= dropPercentage) {
-                        currentInvestment *= (1 + (increasePercentage / 100));
-                    }
-                }
-
-                if (currentPrice > lastHighestValue) {
-                    lastHighestValue = currentPrice;
-                }
-
-                const monthReturn = i === 0 ? 1 : currentPrice / sp500Data[startIndex + i - 1].value;
-                portfolio.currentValue = (portfolio.currentValue * monthReturn) + currentInvestment;
-                portfolio.totalInvested += currentInvestment;
-
-                portfolio.monthlyData.push({
-                    month: i + 1,
-                    date: sp500Data[startIndex + i].date,
-                    invested: portfolio.totalInvested,
-                    value: portfolio.currentValue,
-                    price: currentPrice
-                });
-            }
-
-            return portfolio;
-        };
-
-        const handleCalculate = () => {
-            const portfolio = calculateInvestmentReturns(params);
-            if (portfolio) {
-                setResults({
-                    totalInvested: portfolio.totalInvested,
-                    finalValue: portfolio.currentValue,
-                    returns: portfolio.monthlyData
-                });
-            }
-        };
-
-        // ... (שאר הקוד נשאר אותו דבר)
-    }
-</script>
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</body>
+</html>
