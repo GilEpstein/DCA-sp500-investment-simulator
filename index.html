@@ -15,7 +15,7 @@
             background: #f5f5f5;
         }
         .container { 
-            max-width: 1000px; 
+            max-width: 1200px; 
             margin: 0 auto; 
             padding: 20px;
             background: white;
@@ -45,6 +45,7 @@
             cursor: pointer;
             width: 100%;
             margin-top: 10px;
+            font-size: 16px;
         }
         button:hover {
             background: #0056b3;
@@ -67,6 +68,17 @@
             border-radius: 4px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
+        .result-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #666;
+        }
+        .result-card p {
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
         .monthly-data {
             margin-top: 20px;
             overflow-x: auto;
@@ -74,226 +86,28 @@
         .monthly-data table {
             width: 100%;
             border-collapse: collapse;
+            font-size: 14px;
         }
         .monthly-data th, .monthly-data td {
-            padding: 8px;
+            padding: 10px;
             border: 1px solid #ddd;
             text-align: right;
         }
         .monthly-data th {
             background: #f8f9fa;
+            font-weight: bold;
         }
         .increased {
             background-color: #e8f5e9;
         }
+        .negative {
+            color: #d32f2f;
+        }
+        .positive {
+            color: #388e3c;
+        }
     </style>
 </head>
-<body>
-    <div id="root"></div>
-    <script type="text/babel">
-        function App() {
-            const [sp500Data, setSP500Data] = React.useState([]);
-            const [loading, setLoading] = React.useState(true);
-            const [error, setError] = React.useState(null);
-            const [params, setParams] = React.useState({
-                monthlyInvestment: 100,
-                dropPercentage: 20,
-                increasePercentage: 50,
-                years: 5
-            });
-            const [results, setResults] = React.useState(null);
-
-            React.useEffect(() => {
-                fetch('data/sp500_data.csv')
-                    .then(response => response.text())
-                    .then(csv => {
-                        Papa.parse(csv, {
-                            header: true,
-                            complete: (results) => {
-                                const data = results.data
-                                    .filter(row => row.Date && row.Close)
-                                    .map(row => ({
-                                        date: row.Date,
-                                        price: parseFloat(row.Close)
-                                    }))
-                                    .sort((a, b) => new Date(a.date) - new Date(b.date));
-                                setSP500Data(data);
-                                setLoading(false);
-                            },
-                            error: (err) => {
-                                setError("שגיאה בטעינת הנתונים");
-                                setLoading(false);
-                            }
-                        });
-                    })
-                    .catch(() => {
-                        setError("שגיאה בטעינת הקובץ");
-                        setLoading(false);
-                    });
-            }, []);
-
-            const calculateReturns = () => {
-                if (sp500Data.length === 0) return;
-
-                let portfolio = {
-                    totalInvested: 0,
-                    finalValue: 0,
-                    monthlyData: [],
-                    increasedInvestments: 0,
-                    totalMonths: 0
-                };
-
-                const monthsToCalculate = params.years * 12;
-                const startIndex = Math.max(0, sp500Data.length - monthsToCalculate);
-                
-                for (let i = 0; i < monthsToCalculate && (startIndex + i) < sp500Data.length; i++) {
-                    let currentInvestment = params.monthlyInvestment;
-                    const currentPrice = sp500Data[startIndex + i].price;
-                    
-                    // מציאת המחיר הגבוה ביותר ב-52 שבועות שקדמו לחודש הנוכחי
-                    const last52WeeksStartIndex = Math.max(startIndex, startIndex + i - 52);
-                    const last52WeeksPrices = sp500Data
-                        .slice(last52WeeksStartIndex, startIndex + i)
-                        .map(d => d.price);
-                    
-                    let dropFromHigh = 0;
-                    let highestPrice52Weeks = 0;
-                    
-                    if (last52WeeksPrices.length > 0) {
-                        highestPrice52Weeks = Math.max(...last52WeeksPrices);
-                        dropFromHigh = ((highestPrice52Weeks - currentPrice) / highestPrice52Weeks) * 100;
-                        
-                        if (dropFromHigh >= params.dropPercentage) {
-                            currentInvestment *= (1 + (params.increasePercentage / 100));
-                            portfolio.increasedInvestments++;
-                        }
-                    }
-
-                    // חישוב ערך התיק
-                    const monthReturn = i === 0 ? 1 : currentPrice / sp500Data[startIndex + i - 1].price;
-                    portfolio.finalValue = (portfolio.finalValue * monthReturn) + currentInvestment;
-                    portfolio.totalInvested += currentInvestment;
-                    portfolio.totalMonths++;
-
-                    portfolio.monthlyData.push({
-                        month: i + 1,
-                        date: sp500Data[startIndex + i].date,
-                        invested: currentInvestment,
-                        totalInvested: portfolio.totalInvested,
-                        value: portfolio.finalValue,
-                        currentPrice: currentPrice,
-                        highestPrice52W: highestPrice52Weeks,
-                        dropFromHigh: dropFromHigh,
-                        wasIncreased: currentInvestment > params.monthlyInvestment
-                    });
-                }
-
-                setResults(portfolio);
-            };
-
-            if (loading) return <div className="container">טוען נתונים...</div>;
-            if (error) return <div className="container">שגיאה: {error}</div>;
-
-            return (
-                <div className="container">
-                    <h1>מחשבון השקעות S&P 500</h1>
-                    <div className="input-group">
-                        <label>השקעה חודשית ($)</label>
-                        <input 
-                            type="number" 
-                            value={params.monthlyInvestment}
-                            onChange={(e) => setParams({...params, monthlyInvestment: Number(e.target.value)})}
-                        />
-                    </div>
-                    <div className="input-group">
-                        <label>אחוז ירידה להגדלת השקעה (Y%)</label>
-                        <input 
-                            type="number" 
-                            value={params.dropPercentage}
-                            onChange={(e) => setParams({...params, dropPercentage: Number(e.target.value)})}
-                        />
-                    </div>
-                    <div className="input-group">
-                        <label>אחוז הגדלת השקעה (Z%)</label>
-                        <input 
-                            type="number" 
-                            value={params.increasePercentage}
-                            onChange={(e) => setParams({...params, increasePercentage: Number(e.target.value)})}
-                        />
-                    </div>
-                    <div className="input-group">
-                        <label>תקופת השקעה</label>
-                        <select 
-                            value={params.years}
-                            onChange={(e) => setParams({...params, years: Number(e.target.value)})}
-                        >
-                            <option value={5}>5 שנים</option>
-                            <option value={10}>10 שנים</option>
-                            <option value={15}>15 שנים</option>
-                            <option value={20}>20 שנים</option>
-                        </select>
-                    </div>
-                    <button onClick={calculateReturns}>חשב</button>
-
-                    {results && (
-                        <div className="results">
-                            <div className="results-grid">
-                                <div className="result-card">
-                                    <h3>סך השקעה</h3>
-                                    <p>${results.totalInvested.toLocaleString()}</p>
-                                </div>
-                                <div className="result-card">
-                                    <h3>ערך סופי</h3>
-                                    <p>${results.finalValue.toLocaleString()}</p>
-                                </div>
-                                <div className="result-card">
-                                    <h3>תשואה כוללת</h3>
-                                    <p>{((results.finalValue / results.totalInvested - 1) * 100).toFixed(2)}%</p>
-                                </div>
-                                <div className="result-card">
-                                    <h3>מספר חודשים עם השקעה מוגדלת</h3>
-                                    <p>{results.increasedInvestments} מתוך {results.totalMonths}</p>
-                                </div>
-                            </div>
-                            
-                            <div className="monthly-data">
-                                <h3>נתונים חודשיים אחרונים:</h3>
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>תאריך</th>
-                                            <th>השקעה חודשית</th>
-                                            <th>מחיר נוכחי</th>
-                                            <th>מחיר שיא 52 שבועות</th>
-                                            <th>ירידה מהשיא</th>
-                                            <th>ערך תיק</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {results.monthlyData.slice(-12).map((month, index) => (
-                                            <tr key={index} className={month.wasIncreased ? 'increased' : ''}>
-                                                <td>{month.date}</td>
-                                                <td>${month.invested.toLocaleString()}</td>
-                                                <td>${month.currentPrice.toLocaleString()}</td>
-                                                <td>${month.highestPrice52W.toLocaleString()}</td>
-                                                <td>{month.dropFromHigh.toFixed(2)}%</td>
-                                                <td>${month.value.toLocaleString()}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        ReactDOM.render(<App />, document.getElementById('root'));
-    </script>
-    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-</body>
-</html>
 <body>
     <div id="root"></div>
     <script type="text/babel">
@@ -349,33 +163,31 @@
                 };
 
                 const monthsToCalculate = params.years * 12;
-                const startDataIndex = Math.max(0, sp500Data.length - monthsToCalculate - 52);
-                const startCalculationIndex = Math.max(0, sp500Data.length - monthsToCalculate);
+                const startIndex = Math.max(0, sp500Data.length - monthsToCalculate - 252); // 252 ימי מסחר בשנה
+                let currentHighest52W = 0;
 
-                for (let i = 0; i < monthsToCalculate && (startCalculationIndex + i) < sp500Data.length; i++) {
-                    const currentIndex = startCalculationIndex + i;
+                // לכל חודש השקעה
+                for (let i = 0; i < monthsToCalculate; i++) {
+                    const currentIndex = sp500Data.length - monthsToCalculate + i;
                     const currentPrice = sp500Data[currentIndex].price;
                     let currentInvestment = params.monthlyInvestment;
 
-                    // בדיקת המחיר הגבוה ביותר ב-52 שבועות האחרונים
-                    const yearBeforeIndex = Math.max(startDataIndex, currentIndex - 52);
+                    // מצא את השיא ב-52 שבועות האחרונים (כ-252 ימי מסחר)
+                    const yearBeforeIndex = Math.max(startIndex, currentIndex - 252);
                     const pricesLastYear = sp500Data
-                        .slice(yearBeforeIndex, currentIndex)
+                        .slice(yearBeforeIndex, currentIndex + 1)
                         .map(d => d.price);
                     const highestPrice = Math.max(...pricesLastYear);
 
                     // חישוב הירידה מהשיא
                     const dropFromHigh = ((highestPrice - currentPrice) / highestPrice) * 100;
 
-                    // הגדלת ההשקעה אם יש ירידה מספקת
                     if (dropFromHigh >= params.dropPercentage) {
                         currentInvestment *= (1 + (params.increasePercentage / 100));
                         portfolio.increasedInvestments++;
                     }
 
-                    // חישוב תשואה והוספת ההשקעה
-                    const monthReturn = i === 0 ? 1 : currentPrice / sp500Data[currentIndex - 1].price;
-                    portfolio.finalValue = (portfolio.finalValue * monthReturn) + currentInvestment;
+                    portfolio.finalValue = (i === 0 ? 0 : portfolio.finalValue * (currentPrice / sp500Data[currentIndex - 1].price)) + currentInvestment;
                     portfolio.totalInvested += currentInvestment;
 
                     portfolio.monthlyData.push({
