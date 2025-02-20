@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מחשבון השקעות S&P 500</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.0/Recharts.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            padding: 1.5rem;
+            margin: 1rem;
+        }
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        .input-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        .input-field {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+        }
+        .button {
+            background-color: #2563eb;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+        }
+        .button:hover {
+            background-color: #1d4ed8;
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .result-card {
+            background: #f8fafc;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+
+        function App() {
+            const [params, setParams] = useState({
+                monthlyInvestment: 100,
+                dropPercentage: 20,
+                increasePercentage: 50,
+                years: 5
+            });
+            
+            const [results, setResults] = useState({
+                totalInvested: 0,
+                finalValue: 0,
+                returns: []
+            });
+
+            const calculateReturns = () => {
+                // כאן נוסיף את לוגיקת החישוב האמיתית
+                const monthlyData = Array.from({ length: params.years * 12 }, (_, i) => {
+                    const investedAmount = params.monthlyInvestment * (i + 1);
+                    // זה רק סימולציה פשוטה, נחליף בחישוב אמיתי
+                    const value = investedAmount * (1 + (Math.random() * 0.1));
+                    
+                    return {
+                        month: i + 1,
+                        invested: investedAmount,
+                        value: value
+                    };
+                });
+
+                setResults({
+                    totalInvested: monthlyData[monthlyData.length - 1].invested,
+                    finalValue: monthlyData[monthlyData.length - 1].value,
+                    returns: monthlyData
+                });
+            };
+
+            return (
+                <div className="container mx-auto p-4 max-w-4xl">
+                    <div className="card">
+                        <h1 className="text-2xl font-bold mb-6">מחשבון השקעות S&P 500</h1>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="input-group">
+                                <label className="input-label">השקעה חודשית ($)</label>
+                                <input
+                                    type="number"
+                                    value={params.monthlyInvestment}
+                                    onChange={(e) => setParams({...params, monthlyInvestment: Number(e.target.value)})}
+                                    className="input-field"
+                                />
+                            </div>
+                            
+                            <div className="input-group">
+                                <label className="input-label">אחוז ירידה (Y%)</label>
+                                <input
+                                    type="number"
+                                    value={params.dropPercentage}
+                                    onChange={(e) => setParams({...params, dropPercentage: Number(e.target.value)})}
+                                    className="input-field"
+                                />
+                            </div>
+                            
+                            <div className="input-group">
+                                <label className="input-label">אחוז הגדלת השקעה (Z%)</label>
+                                <input
+                                    type="number"
+                                    value={params.increasePercentage}
+                                    onChange={(e) => setParams({...params, increasePercentage: Number(e.target.value)})}
+                                    className="input-field"
+                                />
+                            </div>
+                            
+                            <div className="input-group">
+                                <label className="input-label">תקופת השקעה (שנים)</label>
+                                <select
+                                    value={params.years}
+                                    onChange={(e) => setParams({...params, years: Number(e.target.value)})}
+                                    className="input-field"
+                                >
+                                    <option value={5}>5 שנים</option>
+                                    <option value={10}>10 שנים</option>
+                                    <option value={15}>15 שנים</option>
+                                    <option value={20}>20 שנים</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button onClick={calculateReturns} className="button mt-6">
+                            חשב תוצאות
+                        </button>
+
+                        {results.returns.length > 0 && (
+                            <div className="mt-8">
+                                <div className="results-grid">
+                                    <div className="result-card">
+                                        <h3 className="font-medium">סך השקעה</h3>
+                                        <p className="text-xl">${results.totalInvested.toLocaleString()}</p>
+                                    </div>
+                                    <div className="result-card">
+                                        <h3 className="font-medium">ערך סופי</h3>
+                                        <p className="text-xl">${results.finalValue.toLocaleString()}</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="h-64 mt-6">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={results.returns}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="month" />
+                                            <YAxis />
+                                            <Tooltip />
+                                            <Legend />
+                                            <Line type="monotone" dataKey="value" stroke="#2563eb" name="ערך תיק" />
+                                            <Line type="monotone" dataKey="invested" stroke="#94a3b8" name="סך השקעה" />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</body>
+</html>
