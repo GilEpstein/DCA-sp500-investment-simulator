@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מחשבון השקעות S&P 500</title>
-    <!-- ספריות מעודכנות -->
     <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -17,7 +16,7 @@
             background: #f5f5f5;
         }
         .container { 
-            max-width: 800px; 
+            max-width: 1000px; 
             margin: 0 auto; 
             padding: 20px;
             background: white;
@@ -46,13 +45,35 @@
             border-radius: 4px;
             cursor: pointer;
             width: 100%;
+            margin-top: 10px;
         }
         button:hover {
             background: #0056b3;
         }
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .result-card {
+            padding: 15px;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
         .chart-container {
             margin-top: 20px;
             height: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -63,66 +84,166 @@
             const [sp500Data, setSP500Data] = React.useState([]);
             const [loading, setLoading] = React.useState(true);
             const [error, setError] = React.useState(null);
+            const [params, setParams] = React.useState({
+                monthlyInvestment: 100,
+                dropPercentage: 20,
+                increasePercentage: 50,
+                years: 5
+            });
+            const [results, setResults] = React.useState(null);
 
             React.useEffect(() => {
                 fetch('data/sp500_data.csv')
                     .then(response => response.text())
                     .then(csv => {
-                        console.log("Loading CSV data...");
                         Papa.parse(csv, {
                             header: true,
-                            dynamicTyping: true,
                             complete: (results) => {
-                                console.log("Parsed", results.data.length, "rows");
-                                setSP500Data(results.data);
+                                const data = results.data
+                                    .filter(row => row.Date && row.Close)
+                                    .map(row => ({
+                                        date: row.Date,
+                                        price: parseFloat(row.Close)
+                                    }))
+                                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+                                setSP500Data(data);
                                 setLoading(false);
                             },
                             error: (err) => {
-                                console.error("Parse error:", err);
                                 setError("שגיאה בטעינת הנתונים");
                                 setLoading(false);
                             }
                         });
                     })
-                    .catch(err => {
-                        console.error("Fetch error:", err);
+                    .catch(() => {
                         setError("שגיאה בטעינת הקובץ");
                         setLoading(false);
                     });
             }, []);
 
+            const calculateReturns = () => {
+                if (sp500Data.length === 0) return;
+
+                let portfolio = {
+                    totalInvested: 0,
+                    finalValue: 0,
+                    monthlyData: []
+                };
+
+                const monthsToCalculate = params.years * 12;
+                const startIndex = Math.max(0, sp500Data.length - monthsToCalculate);
+                let lastHighestPrice = 0;
+
+                for (let i = 0; i < monthsToCalculate && (startIndex + i) < sp500Data.length; i++) {
+                    let currentInvestment = params.monthlyInvestment;
+                    const currentPrice = sp500Data[startIndex + i].price;
+
+                    // בדיקת ירידה מהשיא
+                    if (lastHighestPrice > 0) {
+                        const dropFromHigh = ((lastHighestPrice - currentPrice) / lastHighestPrice) * 100;
+                        if (dropFromHigh >= params.dropPercentage) {
+                            currentInvestment *= (1 + (params.increasePercentage / 100));
+                        }
+                    }
+
+                    // עדכון המחיר הגבוה ביותר
+                    if (currentPrice > lastHighestPrice) {
+                        lastHighestPrice = currentPrice;
+                    }
+
+                    // חישוב תשואה חודשית
+                    const monthReturn = i === 0 ? 1 : currentPrice / sp500Data[startIndex + i - 1].price;
+                    portfolio.finalValue = (portfolio.finalValue * monthReturn) + currentInvestment;
+                    portfolio.totalInvested += currentInvestment;
+
+                    portfolio.monthlyData.push({
+                        month: i + 1,
+                        date: sp500Data[startIndex + i].date,
+                        invested: portfolio.totalInvested,
+                        value: portfolio.finalValue
+                    });
+                }
+
+                setResults(portfolio);
+            };
+
             if (loading) return <div className="container">טוען נתונים...</div>;
             if (error) return <div className="container">שגיאה: {error}</div>;
+
+            const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
 
             return (
                 <div className="container">
                     <h1>מחשבון השקעות S&P 500</h1>
                     <div className="input-group">
                         <label>השקעה חודשית ($)</label>
-                        <input type="number" defaultValue={100} />
+                        <input 
+                            type="number" 
+                            value={params.monthlyInvestment}
+                            onChange={(e) => setParams({...params, monthlyInvestment: Number(e.target.value)})}
+                        />
                     </div>
                     <div className="input-group">
                         <label>אחוז ירידה להגדלת השקעה (Y%)</label>
-                        <input type="number" defaultValue={20} />
+                        <input 
+                            type="number" 
+                            value={params.dropPercentage}
+                            onChange={(e) => setParams({...params, dropPercentage: Number(e.target.value)})}
+                        />
                     </div>
                     <div className="input-group">
                         <label>אחוז הגדלת השקעה (Z%)</label>
-                        <input type="number" defaultValue={50} />
+                        <input 
+                            type="number" 
+                            value={params.increasePercentage}
+                            onChange={(e) => setParams({...params, increasePercentage: Number(e.target.value)})}
+                        />
                     </div>
                     <div className="input-group">
                         <label>תקופת השקעה</label>
-                        <select defaultValue={5}>
+                        <select 
+                            value={params.years}
+                            onChange={(e) => setParams({...params, years: Number(e.target.value)})}
+                        >
                             <option value={5}>5 שנים</option>
                             <option value={10}>10 שנים</option>
                             <option value={15}>15 שנים</option>
                             <option value={20}>20 שנים</option>
                         </select>
                     </div>
-                    <button>חשב</button>
-                    <div>
-                        <p>נטענו {sp500Data.length} רשומות</p>
-                        <pre>{JSON.stringify(sp500Data[0], null, 2)}</pre>
-                    </div>
+                    <button onClick={calculateReturns}>חשב</button>
+
+                    {results && (
+                        <div className="results">
+                            <div className="results-grid">
+                                <div className="result-card">
+                                    <h3>סך השקעה</h3>
+                                    <p>${results.totalInvested.toLocaleString()}</p>
+                                </div>
+                                <div className="result-card">
+                                    <h3>ערך סופי</h3>
+                                    <p>${results.finalValue.toLocaleString()}</p>
+                                </div>
+                                <div className="result-card">
+                                    <h3>תשואה כוללת</h3>
+                                    <p>{((results.finalValue / results.totalInvested - 1) * 100).toFixed(2)}%</p>
+                                </div>
+                            </div>
+                            <div className="chart-container">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={results.monthlyData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Line type="monotone" dataKey="value" name="ערך תיק" stroke="#2196F3" />
+                                        <Line type="monotone" dataKey="invested" name="סך השקעה" stroke="#4CAF50" />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
