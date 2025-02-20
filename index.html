@@ -294,3 +294,207 @@
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 </body>
 </html>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        function App() {
+            const [sp500Data, setSP500Data] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            const [error, setError] = React.useState(null);
+            const [params, setParams] = React.useState({
+                monthlyInvestment: 100,
+                dropPercentage: 20,
+                increasePercentage: 50,
+                years: 5
+            });
+            const [results, setResults] = React.useState(null);
+
+            React.useEffect(() => {
+                fetch('data/sp500_data.csv')
+                    .then(response => response.text())
+                    .then(csv => {
+                        Papa.parse(csv, {
+                            header: true,
+                            complete: (results) => {
+                                const data = results.data
+                                    .filter(row => row.Date && row.Close)
+                                    .map(row => ({
+                                        date: row.Date,
+                                        price: parseFloat(row.Close)
+                                    }))
+                                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+                                setSP500Data(data);
+                                setLoading(false);
+                            },
+                            error: (err) => {
+                                setError("שגיאה בטעינת הנתונים");
+                                setLoading(false);
+                            }
+                        });
+                    })
+                    .catch(() => {
+                        setError("שגיאה בטעינת הקובץ");
+                        setLoading(false);
+                    });
+            }, []);
+
+            const calculateReturns = () => {
+                if (sp500Data.length === 0) return;
+
+                let portfolio = {
+                    totalInvested: 0,
+                    finalValue: 0,
+                    monthlyData: [],
+                    increasedInvestments: 0
+                };
+
+                const monthsToCalculate = params.years * 12;
+                const startDataIndex = Math.max(0, sp500Data.length - monthsToCalculate - 52);
+                const startCalculationIndex = Math.max(0, sp500Data.length - monthsToCalculate);
+
+                for (let i = 0; i < monthsToCalculate && (startCalculationIndex + i) < sp500Data.length; i++) {
+                    const currentIndex = startCalculationIndex + i;
+                    const currentPrice = sp500Data[currentIndex].price;
+                    let currentInvestment = params.monthlyInvestment;
+
+                    // בדיקת המחיר הגבוה ביותר ב-52 שבועות האחרונים
+                    const yearBeforeIndex = Math.max(startDataIndex, currentIndex - 52);
+                    const pricesLastYear = sp500Data
+                        .slice(yearBeforeIndex, currentIndex)
+                        .map(d => d.price);
+                    const highestPrice = Math.max(...pricesLastYear);
+
+                    // חישוב הירידה מהשיא
+                    const dropFromHigh = ((highestPrice - currentPrice) / highestPrice) * 100;
+
+                    // הגדלת ההשקעה אם יש ירידה מספקת
+                    if (dropFromHigh >= params.dropPercentage) {
+                        currentInvestment *= (1 + (params.increasePercentage / 100));
+                        portfolio.increasedInvestments++;
+                    }
+
+                    // חישוב תשואה והוספת ההשקעה
+                    const monthReturn = i === 0 ? 1 : currentPrice / sp500Data[currentIndex - 1].price;
+                    portfolio.finalValue = (portfolio.finalValue * monthReturn) + currentInvestment;
+                    portfolio.totalInvested += currentInvestment;
+
+                    portfolio.monthlyData.push({
+                        date: sp500Data[currentIndex].date,
+                        currentPrice: currentPrice,
+                        highestPrice52W: highestPrice,
+                        dropFromHigh: dropFromHigh,
+                        investment: currentInvestment,
+                        totalInvested: portfolio.totalInvested,
+                        portfolioValue: portfolio.finalValue,
+                        wasIncreased: dropFromHigh >= params.dropPercentage
+                    });
+                }
+
+                setResults(portfolio);
+            };
+
+            if (loading) return <div className="container">טוען נתונים...</div>;
+            if (error) return <div className="container">שגיאה: {error}</div>;
+
+            return (
+                <div className="container">
+                    <h1>מחשבון השקעות S&P 500</h1>
+                    <div className="input-group">
+                        <label>השקעה חודשית ($)</label>
+                        <input 
+                            type="number" 
+                            value={params.monthlyInvestment}
+                            onChange={(e) => setParams({...params, monthlyInvestment: Number(e.target.value)})}
+                        />
+                    </div>
+                    <div className="input-group">
+                        <label>אחוז ירידה להגדלת השקעה (Y%)</label>
+                        <input 
+                            type="number" 
+                            value={params.dropPercentage}
+                            onChange={(e) => setParams({...params, dropPercentage: Number(e.target.value)})}
+                        />
+                    </div>
+                    <div className="input-group">
+                        <label>אחוז הגדלת השקעה (Z%)</label>
+                        <input 
+                            type="number" 
+                            value={params.increasePercentage}
+                            onChange={(e) => setParams({...params, increasePercentage: Number(e.target.value)})}
+                        />
+                    </div>
+                    <div className="input-group">
+                        <label>תקופת השקעה</label>
+                        <select 
+                            value={params.years}
+                            onChange={(e) => setParams({...params, years: Number(e.target.value)})}
+                        >
+                            <option value={5}>5 שנים</option>
+                            <option value={10}>10 שנים</option>
+                            <option value={15}>15 שנים</option>
+                            <option value={20}>20 שנים</option>
+                        </select>
+                    </div>
+                    <button onClick={calculateReturns}>חשב</button>
+
+                    {results && (
+                        <div className="results">
+                            <div className="results-grid">
+                                <div className="result-card">
+                                    <h3>סך השקעה</h3>
+                                    <p>${results.totalInvested.toLocaleString()}</p>
+                                </div>
+                                <div className="result-card">
+                                    <h3>ערך סופי</h3>
+                                    <p>${results.finalValue.toLocaleString()}</p>
+                                </div>
+                                <div className="result-card">
+                                    <h3>תשואה כוללת</h3>
+                                    <p>{((results.finalValue / results.totalInvested - 1) * 100).toFixed(2)}%</p>
+                                </div>
+                                <div className="result-card">
+                                    <h3>חודשים עם השקעה מוגדלת</h3>
+                                    <p>{results.increasedInvestments} מתוך {results.monthlyData.length}</p>
+                                </div>
+                            </div>
+                            
+                            <div className="monthly-data">
+                                <h3>נתונים חודשיים אחרונים:</h3>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>תאריך</th>
+                                            <th>מחיר נוכחי</th>
+                                            <th>שיא 52 שבועות</th>
+                                            <th>ירידה מהשיא (%)</th>
+                                            <th>השקעה חודשית</th>
+                                            <th>ערך תיק</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {results.monthlyData.slice(-12).map((month, index) => (
+                                            <tr key={index} className={month.wasIncreased ? 'increased' : ''}>
+                                                <td>{month.date}</td>
+                                                <td>${month.currentPrice.toLocaleString()}</td>
+                                                <td>${month.highestPrice52W.toLocaleString()}</td>
+                                                <td className={month.dropFromHigh > 0 ? 'negative' : 'positive'}>
+                                                    {month.dropFromHigh.toFixed(2)}%
+                                                </td>
+                                                <td>${month.investment.toLocaleString()}</td>
+                                                <td>${month.portfolioValue.toLocaleString()}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</body>
+</html>
